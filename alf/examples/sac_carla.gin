@@ -32,6 +32,11 @@ SacAlgorithm.target_update_tau=0.005
 SacAlgorithm.critic_loss_ctor=@TDLoss
 SacAlgorithm.use_parallel_network=True
 
+import alf.algorithms.prior_actor
+PriorActor.same_action_prob=0.95
+PriorActor.same_action_noise=0.05
+SacAlgorithm.prior_actor_ctor=@PriorActor
+
 encoder/EncodingNetwork.input_preprocessors=%input_preprocessors
 encoder/EncodingNetwork.preprocessing_combiner=@NestSum(activation=%activation, average=True)
 encoder/EncodingNetwork.activation=%activation
