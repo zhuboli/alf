@@ -13,13 +13,14 @@ actor/StableNormalProjectionNetwork.squash_mean=False
 actor/StableNormalProjectionNetwork.scale_distribution=True
 actor/StableNormalProjectionNetwork.min_std=1e-3
 actor/StableNormalProjectionNetwork.max_std=10.
-actor/ActorDistributionNetwork.fc_layers_params=%fc_layer_params
+actor/ActorDistributionNetwork.fc_layer_params=%fc_layers_params
 actor/ActorDistributionNetwork.activation=%activation
+actor/ActorDistributionNetwork.use_fc_bn=%use_batch_normalization
 actor/ActorDistributionNetwork.continuous_projection_net_ctor=@actor/StableNormalProjectionNetwork
 
-critic/CriticNetwork.observation_preprocessing_combiner=@NestSum(activation=%activation, average=True)
 critic/CriticNetwork.joint_fc_layer_params=%fc_layers_params
 critic/CriticNetwork.activation=%activation
+critic/CriticNetwork.use_fc_bn=%use_batch_normalization
 
 Adam.lr=2e-4
 SacAlgorithm.actor_network_cls=@actor/ActorDistributionNetwork
@@ -34,9 +35,11 @@ SacAlgorithm.critic_loss_ctor=@TDLoss
 SacAlgorithm.use_parallel_network=True
 
 import alf.algorithms.prior_actor
-PriorActor.same_action_prob=0.95
-PriorActor.same_action_noise=0.05
-SacAlgorithm.prior_actor_ctor=@PriorActor
+#SameActionPriorActor.same_action_prob=0.95
+#SameActionPriorActor.same_action_noise=0.05
+#SacAlgorithm.target_kld_per_dim=0.1
+#SacAlgorithm.prior_actor_ctor=@SameActionPriorActor
+#SacAlgorithm.max_log_alpha=0.0
 
 encoder/EncodingNetwork.input_preprocessors=%input_preprocessors
 encoder/EncodingNetwork.preprocessing_combiner=@NestSum(activation=%activation, average=True)
@@ -47,16 +50,18 @@ TrainerConfig.data_transformer_ctor=@agent/ImageScaleTransformer
 Agent.representation_learner_cls=@encoder/EncodingAlgorithm
 Agent.optimizer=@Adam()
 agent/ImageScaleTransformer.min=0.0
-agent/ImageScaleTransformer.fields=['camera']
+agent/ImageScaleTransformer.fields=['observation.camera']
+
+# use_batch_normalization=True
 
 # Not yet able to successfully train with sparse reward.
 suite_carla.Player.sparse_reward=False
 
 # Currently, even a small penalty such as one make the training much worse
-suite_carla.Player.max_collision_penalty=100.
+suite_carla.Player.max_collision_penalty=0.
 
-CarlaEnvironment.num_other_vehicles=20
-CarlaEnvironment.num_walkers=20
+# CarlaEnvironment.num_other_vehicles=20
+# CarlaEnvironment.num_walkers=20
 
 # training config
 TrainerConfig.initial_collect_steps=3000

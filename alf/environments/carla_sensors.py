@@ -105,6 +105,7 @@ class CollisionSensor(SensorBase):
     It gets the impulses from the collisions during the last tick.
 
     TODO: include event.other_actor in the sensor result.
+    TODO: use ego-centric coordinates
     """
 
     def __init__(self, parent_actor, max_num_collisions=4):
