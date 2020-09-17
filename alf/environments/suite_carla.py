@@ -594,7 +594,7 @@ class Player(object):
             'Brake:    %4.2f' % self._control.brake,
             'Steer:    %4.2f' % self._control.steer,
             'Reverse:  %4s' % self._control.reverse,
-            'Reward: %.1f' % float(self._current_time_step.reward),
+            'Reward: %.1f' % float(self._current_time_step.reward.sum()),
         ]
         self._draw_text(info_text)
 
