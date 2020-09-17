@@ -21,6 +21,7 @@ actor/ActorDistributionNetwork.continuous_projection_net_ctor=@actor/StableNorma
 critic/CriticNetwork.joint_fc_layer_params=%fc_layers_params
 critic/CriticNetwork.activation=%activation
 critic/CriticNetwork.use_fc_bn=%use_batch_normalization
+critic/CriticNetwork.output_tensor_spec=@TensorSpec((%CarlaEnvironment.REWARD_DIMENSION,))
 
 Adam.lr=2e-4
 SacAlgorithm.actor_network_cls=@actor/ActorDistributionNetwork
@@ -33,6 +34,8 @@ SacAlgorithm.target_entropy=@sac/calc_default_target_entropy
 SacAlgorithm.target_update_tau=0.005
 SacAlgorithm.critic_loss_ctor=@TDLoss
 SacAlgorithm.use_parallel_network=True
+SacAlgorithm.use_entropy_reward=False
+SacAlgorithm.reward_weights=[1, 0., 0., 0.]
 
 import alf.algorithms.prior_actor
 #SameActionPriorActor.same_action_prob=0.95

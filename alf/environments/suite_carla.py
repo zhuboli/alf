@@ -634,6 +634,9 @@ def _exec(command):
     return ret
 
 
+gin.constant('CarlaEnvironment.REWARD_DIMENSION', Player.REWARD_DIMENSION)
+
+
 @gin.configurable
 class CarlaServer(object):
     """CarlaServer for doing the simulation."""
@@ -1124,6 +1127,8 @@ def load(map_name, batch_size, wrappers=[]):
             and 'Town10HD'
         batch_size (int): the number of vehicles in the simulation.
         wrappers (list[AlfEnvironmentBaseWrapper]): environment wrappers
+    Returns:
+        CarlaEnvironment
     """
     env = CarlaEnvironment(batch_size, map_name)
     for wrapper in wrappers:
