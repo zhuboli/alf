@@ -164,6 +164,7 @@ class Player(object):
                  stuck_at_collision_distance=1.0,
                  sparse_reward=False,
                  sparse_reward_interval=10.,
+                 allow_negative_distance_reward=True,
                  min_speed=5.):
         """
         Args:
@@ -188,6 +189,15 @@ class Player(object):
                 True, the distance reward is only given after moving ``sparse_reward_distance``.
             sparse_reward_interval (float): the sparse reward is given after
                 approximately every such distance along the route has been driven.
+            allow_negative_distance_reward (True): whether to allow negative distance
+                reward. If True, the agent will receive positive reward for moving
+                ahead along the route, and negative rewad for moving back along
+                the route. If False, the agent still receives positive reward for
+                moving ahead along the route, but will not receive negative rewad
+                for moving back along the route. Instead, the negative distance
+                will be accumulated to the future distance reward. This may ease
+                the learning if the right behavior is to temporarily go back along
+                the route in order, for examle, to avoid obstacle.
             min_speed (float): unit is m/s. Failure if initial_distance / min_speed
                 seconds passed
         """
@@ -211,6 +221,7 @@ class Player(object):
         self._sparse_reward = sparse_reward
         self._sparse_reward_index_interval = int(
             max(1, sparse_reward_interval // self._alf_world.route_resolution))
+        self._allow_negative_distance_reward = allow_negative_distance_reward
 
         self._observation_sensors = {
             'collision': self._collision_sensor,
@@ -317,6 +328,7 @@ class Player(object):
         self._intermediate_start = _to_numpy_loc(loc)
 
         self._episode_reward = 0.
+        self._unrecorded_distance_reward = 0.
         self._is_first_step = True
 
         return commands
@@ -506,8 +518,16 @@ class Player(object):
             goal0 = obs['navigation'][2]  # This is about 10m ahead
             distance_reward = (np.linalg.norm(prev_loc - goal0) -
                                np.linalg.norm(curr_loc - goal0))
-        reward += distance_reward
+
         reward_vector[Player.REWARD_DISTANCE] = distance_reward
+        if not self._allow_negative_distance_reward:
+            distance_reward += self._unrecorded_distance_reward
+            if distance_reward < 0:
+                self._unrecorded_distance_reward = distance_reward
+                distance_reward = 0
+            else:
+                self._unrecorded_distance_reward = 0
+        reward += distance_reward
 
         obs['navigation'] = _calculate_relative_position(
             self._actor.get_transform(), obs['navigation'])
