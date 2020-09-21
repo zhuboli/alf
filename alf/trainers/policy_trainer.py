@@ -325,8 +325,15 @@ class RLTrainer(Trainer):
         # will be marked as "inoperative". This env should be created last.
         # DO NOT register this env in self._envs because AsyncOffPolicyTrainer
         # will use all self._envs to init AsyncOffPolicyDriver!
-        self._unwrapped_env = self._create_environment(
-            nonparallel=True, random_seed=self._random_seed, register=False)
+        if self._evaluate or isinstance(
+                env,
+                alf.environments.parallel_environment.ParallelAlfEnvironment):
+            self._unwrapped_env = self._create_environment(
+                nonparallel=True,
+                random_seed=self._random_seed,
+                register=False)
+        else:
+            self._unwrapped_env = None
         self._eval_env = None
         self._eval_metrics = None
         self._eval_summary_writer = None
@@ -364,7 +371,8 @@ class RLTrainer(Trainer):
         """Close all envs to release their resources."""
         for env in self._envs:
             env.close()
-        self._unwrapped_env.close()
+        if self._unwrapped_env is not None:
+            self._unwrapped_env.close()
 
     def _train(self):
         for env in self._envs:
