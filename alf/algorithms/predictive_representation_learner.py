@@ -28,8 +28,8 @@ from alf.utils.summary_utils import safe_mean_hist_summary, safe_mean_summary
 PredictiveRepresentationLearnerInfo = namedtuple(
     'PredictiveRepresentationLearnerInfo',
     [
-        # actual actions taken in the next unroll_steps
-        # [B, unroll_steps, ...]
+        # actual actions taken in the next unroll_steps + 1 steps
+        # [B, unroll_steps + 1, ...]
         'action',
 
         # The flag to indicate whether to include this target into loss
@@ -49,9 +49,11 @@ class SimpleDecoder(Algorithm):
                  target_field,
                  decoder_net_ctor,
                  summarize_each_dimension=False,
+                 optimizer=None,
                  debug_summaries=False,
                  name="SimpleDecoder"):
-        super().__init__(debug_summaries=debug_summaries, name=name)
+        super().__init__(
+            optimizer=optimizer, debug_summaries=debug_summaries, name=name)
         self._decoder_net = decoder_net_ctor(
             input_tensor_spec=input_tensor_spec)
         assert self._decoder_net.state_spec == (
@@ -91,8 +93,9 @@ class SimpleDecoder(Algorithm):
                 def _summarize(pred, tgt, loss, mask, suffix):
                     _summarize1(pred[0], tgt[0], loss[0], mask[0],
                                 suffix + "/current")
-                    _summarize1(pred[1:], tgt[1:], loss[1:], mask[1:],
-                                suffix + "/future")
+                    if pred.shape[0] > 1:
+                        _summarize1(pred[1:], tgt[1:], loss[1:], mask[1:],
+                                    suffix + "/future")
 
                 if loss.ndim == 2:
                     _summarize(predicted, target, loss, mask, '')
@@ -125,13 +128,22 @@ class PredictiveRepresentationLearner(Algorithm):
                  decoder_ctor,
                  encoding_net_ctor,
                  dynamics_net_ctor,
+                 encoding_optimizer=None,
+                 dynamics_optimizer=None,
                  debug_summaries=False,
                  name="PredictiveRepresentationLearner"):
         """
         Args:
+            observation_spec,
+            action_spec,
+            num_unroll_steps:
             decoder_ctor: ``decoder_ctor(observation)``
             encoding_net_ctor: ``encoding_net_ctor(observation_spec)``
             dynamics_net_ctor: ``dynamics_net_ctor(action_spec)``
+            encoding_optimizer:
+            dynamics_optimizer:
+            debug_summaries:
+            name:
         """
 
         encoding_net = encoding_net_ctor(observation_spec)
@@ -141,8 +153,9 @@ class PredictiveRepresentationLearner(Algorithm):
             name=name)
 
         self._encoding_net = encoding_net
+        if encoding_optimizer is not None:
+            self.add_optimizer(encoding_optimizer, [self._encoding_net])
         repr_spec = self._encoding_net.output_spec
-        self._dynamics_net = dynamics_net_ctor(action_spec)
         self._decoder = decoder_ctor(
             repr_spec, debug_summaries=debug_summaries, name=name + ".decoder")
         assert len(alf.nest.flatten(self._decoder.train_state_spec)) == 0, (
@@ -150,26 +163,31 @@ class PredictiveRepresentationLearner(Algorithm):
         self._num_unroll_steps = num_unroll_steps
         self._target_fields = self._decoder.get_target_fields()
         self._output_spec = repr_spec
-        self._dynamics_state_dims = alf.nest.map_structure(
-            lambda spec: spec.numel,
-            alf.nest.flatten(self._dynamics_net.state_spec))
-        assert sum(
-            self._dynamics_state_dims) > 0, ("dynamics_net should be RNN")
-        compatible_state = True
-        try:
-            alf.nest.assert_same_structure(self._dynamics_net.state_spec,
-                                           self._encoding_net.state_spec)
-            compatible_state = all(
-                alf.nest.flatten(
-                    alf.nest.map_structure(lambda s1, s2: s1 == s2,
-                                           self._dynamics_net.state_spec,
-                                           self._encoding_net.state_spec)))
-        except Exception:
-            compatible_state = False
-        self._latent_to_dstate_fc = None
-        if not compatible_state:
-            self._latent_to_dstate_fc = alf.layers.FC(
-                repr_spec.numel, sum(self._dynamics_state_dims))
+
+        if num_unroll_steps > 0:
+            self._dynamics_net = dynamics_net_ctor(action_spec)
+            if dynamics_optimizer is not None:
+                self.add_optimizer(dynamics_optimizer, [self._dynamics_net])
+            self._dynamics_state_dims = alf.nest.map_structure(
+                lambda spec: spec.numel,
+                alf.nest.flatten(self._dynamics_net.state_spec))
+            assert sum(
+                self._dynamics_state_dims) > 0, ("dynamics_net should be RNN")
+            compatible_state = True
+            try:
+                alf.nest.assert_same_structure(self._dynamics_net.state_spec,
+                                               self._encoding_net.state_spec)
+                compatible_state = all(
+                    alf.nest.flatten(
+                        alf.nest.map_structure(lambda s1, s2: s1 == s2,
+                                               self._dynamics_net.state_spec,
+                                               self._encoding_net.state_spec)))
+            except Exception:
+                compatible_state = False
+            self._latent_to_dstate_fc = None
+            if not compatible_state:
+                self._latent_to_dstate_fc = alf.layers.FC(
+                    repr_spec.numel, sum(self._dynamics_state_dims))
 
     @property
     def output_spec(self):
@@ -184,20 +202,23 @@ class PredictiveRepresentationLearner(Algorithm):
         return AlgStep(output=latent, state=state)
 
     def train_step(self, exp: TimeStep, state):
-        batch_size = exp.step_type.shape[0]
-        latent, state = self._encoding_net(exp.observation, state)
         # [B, num_unroll_steps + 1]
         info = exp.rollout_info
-
-        if self._latent_to_dstate_fc is not None:
-            dstate = self._latent_to_dstate_fc(latent)
-            dstate = dstate.split(self._dynamics_state_dims, dim=1)
-            dstate = alf.nest.pack_sequence_as(self._dynamics_net.state_spec,
-                                               dstate)
-        else:
-            dstate = state
+        batch_size = exp.step_type.shape[0]
+        latent, state = self._encoding_net(exp.observation, state)
 
         sim_latents = [latent]
+
+        if self._num_unroll_steps > 0:
+
+            if self._latent_to_dstate_fc is not None:
+                dstate = self._latent_to_dstate_fc(latent)
+                dstate = dstate.split(self._dynamics_state_dims, dim=1)
+                dstate = alf.nest.pack_sequence_as(
+                    self._dynamics_net.state_spec, dstate)
+            else:
+                dstate = state
+
         for i in range(self._num_unroll_steps):
             sim_latent, dstate = self._dynamics_net(info.action[:, i, ...],
                                                     dstate)
@@ -266,9 +287,8 @@ class PredictiveRepresentationLearner(Algorithm):
             target = replay_buffer.get_field(self._target_fields, env_ids,
                                              positions)
 
-            # [B, T, unroll_steps]
-            action = replay_buffer.get_field('action', env_ids,
-                                             positions[:, :, :-1])
+            # [B, T, unroll_steps+1]
+            action = replay_buffer.get_field('action', env_ids, positions)
 
             rollout_info = PredictiveRepresentationLearnerInfo(
                 action=action, mask=mask, target=target)
