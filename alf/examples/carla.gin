@@ -4,8 +4,8 @@ import alf
 import alf.algorithms.merlin_algorithm
 import alf.environments.suite_carla
 
-CameraSensor.image_size_x=200
-CameraSensor.image_size_y=100
+CameraSensor.image_size_x=128
+CameraSensor.image_size_y=64
 CameraSensor.fov=135
 
 create_environment.env_name='Town01'
@@ -14,7 +14,7 @@ create_environment.num_parallel_environments=4
 
 use_batch_normalization=False
 BottleneckBlock.with_batch_normalization=%use_batch_normalization
-preproc_bn=True
+preproc_bn=False
 
 suite_carla.Player.with_gnss_sensor=False
 
@@ -47,4 +47,4 @@ input_preprocessors={
 
 import alf.environments.alf_wrappers
 
-suite_carla.load.wrappers=[@ActionObservationWrapper]
+suite_carla.load.wrappers=[@ActionObservationWrapper, @CarlaScalarRewardWrapper]

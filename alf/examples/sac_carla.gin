@@ -21,7 +21,7 @@ actor/ActorDistributionNetwork.continuous_projection_net_ctor=@actor/StableNorma
 critic/CriticNetwork.joint_fc_layer_params=%fc_layers_params
 critic/CriticNetwork.activation=%activation
 critic/CriticNetwork.use_fc_bn=%use_batch_normalization
-critic/CriticNetwork.output_tensor_spec=@TensorSpec((%CarlaEnvironment.REWARD_DIMENSION,))
+#critic/CriticNetwork.output_tensor_spec=@TensorSpec((%CarlaEnvironment.REWARD_DIMENSION,))
 
 Adam.lr=1e-4
 
@@ -36,7 +36,7 @@ SacAlgorithm.target_update_tau=0.005
 SacAlgorithm.critic_loss_ctor=@TDLoss
 SacAlgorithm.use_parallel_network=True
 SacAlgorithm.use_entropy_reward=False
-SacAlgorithm.reward_weights=[1, 0., 0., 0.]
+#SacAlgorithm.reward_weights=[1, 0., 0., 0.]
 
 # config EncodingAlgorithm
 encoder/EncodingNetwork.input_preprocessors=%input_preprocessors
@@ -66,11 +66,13 @@ ReplayBuffer.keep_episodic_info=True
 # Change to `ReprLearner=@encoder/EncodingAlgorithm` to use EncodingAlgorithm
 ReprLearner=@PredictiveRepresentationLearner
 
-TrainerConfig.data_transformer_ctor=@agent/ImageScaleTransformer
+TrainerConfig.data_transformer_ctor=[@agent/ImageScaleTransformer,
+                                     @agent/ObservationNormalizer]
 Agent.representation_learner_cls=%ReprLearner
 Agent.optimizer=@Adam()
 agent/ImageScaleTransformer.min=0.0
 agent/ImageScaleTransformer.fields=['observation.camera']
+agent/ObservationNormalizer.clipping=5.0
 
 # Not yet able to successfully train with sparse reward.
 suite_carla.Player.sparse_reward=False
